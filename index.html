@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chore Indicator</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #fff; margin: 0; padding: 20px; }
+    h1 { text-align: center; font-size: 1.5rem; margin-bottom: 20px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; max-width: 900px; margin: 0 auto; }
+    .card { background: #1e1e1e; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; justify-content: space-between; border-left: 6px solid #444; }
+    .card.green { border-left-color: #2ecc71; }
+    .card.yellow { border-left-color: #f1c40f; }
+    .card.red { border-left-color: #e74c3c; }
+    .info h3 { margin: 0 0 6px 0; font-size: 1.1rem; }
+    .info p { margin: 2px 0; font-size: 0.85rem; color: #aaa; }
+    .actions { margin-top: 14px; display: flex; gap: 8px; }
+    button { flex: 1; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    .btn-done { background: #27ae60; color: white; }
+    .btn-done:active { background: #219150; }
+    .badge { font-size: 0.75rem; font-weight: bold; padding: 2px 6px; border-radius: 4px; background: #333; }
+  </style>
+</head>
+<body>
+  <h1>Chore Dashboard</h1>
+  <div id="loading" style="text-align:center;">Loading chores...</div>
+  <div class="grid" id="choreGrid"></div>
+
+  <script>
+    // PASTE YOUR SCRIPT URL HERE:
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyuiqrRO3MLwabJ77OZ-EVKQdYh_RLs4IUX_evsndCtcKimTVcNsz2HpdU8kYRXckv-/exec";
+
+    async function loadChores() {
+      try {
+        const res = await fetch(SCRIPT_URL);
+        const chores = await res.json();
+        renderChores(chores);
+      } catch (err) {
+        document.getElementById("loading").innerText = "Error loading chores.";
+        console.error(err);
+      }
+    }
+
+    function getStatus(lastDoneStr, intervalDays) {
+      if (!lastDoneStr) return "red";
+      const lastDone = new Date(lastDoneStr);
+      const now = new Date();
+      const elapsedDays = (now - lastDone) / (1000 * 60 * 60 * 24);
+
+      if (elapsedDays >= intervalDays) return "red";       // Overdue
+      if (elapsedDays >= intervalDays * 0.75) return "yellow"; // Due soon
+      return "green";                                     // Fresh
+    }
+
+    function renderChores(chores) {
+      const grid = document.getElementById("choreGrid");
+      grid.innerHTML = "";
+      document.getElementById("loading").style.display = "none";
+
+      chores.forEach(c => {
+        if (!c.name) return; // skip blank rows
+        const status = getStatus(c.last_done, c.interval_days);
+        const card = document.createElement("div");
+        card.className = `card ${status}`;
+        card.innerHTML = `
+          <div class="info">
+            <span class="badge">LED #${c.led_index}</span>
+            <h3>${c.name}</h3>
+            <p>Every ${c.interval_days} day(s)</p>
+            <p>Last done: ${c.last_done ? new Date(c.last_done).toLocaleDateString() : "Never"}</p>
+          </div>
+          <div class="actions">
+            <button class="btn-done" onclick="markDone(${c.led_index})">Mark Done</button>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    async function markDone(ledIndex) {
+      // Optimistic refresh indication
+      document.getElementById("loading").style.display = "block";
+      document.getElementById("loading").innerText = "Updating...";
+      
+      // Google Apps Script accepts text/plain to avoid CORS preflight OPTIONS rejection
+      await fetch(SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify({ action: "mark_done", led_index: ledIndex })
+      });
+
+      // Give Google Sheets 1 sec to update, then reload
+      setTimeout(loadChores, 1200);
+    }
+
+    loadChores();
+  </script>
+</body>
+</html>
